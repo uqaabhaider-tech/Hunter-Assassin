@@ -1,57 +1,75 @@
 using UnityEngine;
 using UnityEngine.AI;
-using UnityEngine.InputSystem; // Necessary for New Input System
+using UnityEngine.InputSystem;
 
 public class AssassinController : MonoBehaviour
 {
     private NavMeshAgent agent;
-    private Animator anim;
+    public Animator anim;
+    public int health = 3;
+    public float attackRange = 2.0f;
+    private Transform targetEnemy;
 
     void Start()
     {
         agent = GetComponent<NavMeshAgent>();
-        anim = GetComponent<Animator>();
+        if (anim == null) anim = GetComponent<Animator>();
     }
 
     void Update()
     {
         if (Pointer.current != null && Pointer.current.press.wasPressedThisFrame)
+            HandleInput();
+
+        if (targetEnemy != null)
         {
-            MoveToPointer();
+            if (Vector3.Distance(transform.position, targetEnemy.position) <= attackRange)
+                ExecuteKill();
         }
 
-        // NEW LOGIC: Check if we are close enough to stop
-        float speed = 0;
-
-        // If the agent is still calculating a path or moving
-        if (agent.hasPath && agent.remainingDistance > agent.stoppingDistance)
-        {
-            speed = agent.velocity.magnitude;
-        }
-        else
-        {
-            // Force the speed to 0 if we are at the destination
-            speed = 0;
-            agent.velocity = Vector3.zero; // Stop any micro-drifting
-        }
-
-        anim.SetFloat("speed", speed);
+        if (anim != null)
+            anim.SetFloat("speed", agent.velocity.magnitude);
     }
 
-    void MoveToPointer()
+    void HandleInput()
     {
-        // Get the position of the pointer (Touch or Mouse)
-        Vector2 pointerPosition = Pointer.current.position.ReadValue();
-
-        // Convert the 2D screen point to a 3D Ray
-        Ray ray = Camera.main.ScreenPointToRay(pointerPosition);
-        RaycastHit hit;
-
-        // Perform the Raycast
-        if (Physics.Raycast(ray, out hit))
+        Vector2 screenPos = Pointer.current.position.ReadValue();
+        Ray ray = Camera.main.ScreenPointToRay(screenPos);
+        if (Physics.Raycast(ray, out RaycastHit hit))
         {
-            // Move the agent to the hit point
+            if (hit.collider.CompareTag("Enemy"))
+                targetEnemy = hit.collider.transform;
+            else
+                targetEnemy = null;
+
             agent.SetDestination(hit.point);
+        }
+    }
+
+    void ExecuteKill()
+    {
+        if (targetEnemy == null) return;
+        GuardAI enemy = targetEnemy.GetComponent<GuardAI>();
+        if (enemy != null)
+        {
+            transform.LookAt(targetEnemy);
+            if (anim != null) anim.SetTrigger("Attack");
+            enemy.Vanish();
+        }
+        targetEnemy = null;
+        agent.ResetPath();
+    }
+
+    public void TakeDamage(int damage)
+    {
+        health -= damage;
+        Debug.Log("Player Hit! Remaining Health: " + health); // Check your console for this message!
+
+        if (health <= 0)
+        {
+            // This is what makes the player "Vanish"
+            gameObject.SetActive(false);
+            Debug.Log("PLAYER VANISHED");
         }
     }
 }
