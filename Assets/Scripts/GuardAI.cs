@@ -6,15 +6,23 @@ public class GuardAI : MonoBehaviour
     [Header("Movement Settings")]
     public float wanderRadius = 10f;
     public float wanderTimer = 4f;
-    public float chaseSpeed = 6f;      // Faster speed for chasing
-    public float patrolSpeed = 2.5f;   // Slower speed for patrolling
+    public float chaseSpeed = 4f;
+    public float patrolSpeed = 2f;
 
     [Header("Detection Settings")]
     public float detectionRange = 12f;
-    public float viewAngle = 90f;
-    public float attackRate = 1.0f;
-    public float chaseTime = 4.0f;     // Seconds to follow after losing sight
+    public float viewAngle = 120f;
+    public float attackRate = 1.5f;
+    public float chaseTime = 4.0f;
     public LayerMask obstructionMask;
+
+    [Header("Vision Visuals")]
+    public Light visionSpotlight;
+    public Color patrolColor = new Color(0.3f, 0, 0);
+    public Color alertColor = Color.red;
+
+    [Header("Hunter Assassin FX")]
+    public GameObject gemPrefab; // Drag your Diamond prefab here!
 
     [Header("References")]
     public EnemyGun gunScript;
@@ -33,16 +41,20 @@ public class GuardAI : MonoBehaviour
         wanderCounter = wanderTimer;
         playerScript = GameObject.FindFirstObjectByType<AssassinController>();
 
-        // Initial setup
         agent.speed = patrolSpeed;
         agent.stoppingDistance = 0f;
+
+        if (visionSpotlight != null)
+        {
+            visionSpotlight.color = patrolColor;
+            visionSpotlight.range = detectionRange;
+        }
     }
 
     void Update()
     {
         if (playerScript == null || !playerScript.gameObject.activeInHierarchy) return;
 
-        // Sync Animator Speed
         if (enemyAnim != null)
             enemyAnim.SetFloat("Speed", agent.velocity.magnitude);
 
@@ -51,32 +63,33 @@ public class GuardAI : MonoBehaviour
 
         bool canSeePlayer = false;
 
-        // Check Line of Sight
         if (distance < detectionRange)
         {
             float angle = Vector3.Angle(transform.forward, dirToPlayer);
             if (angle < viewAngle / 2f)
             {
-                if (!Physics.Raycast(transform.position + Vector3.up, dirToPlayer, distance, obstructionMask))
+                if (!Physics.Raycast(transform.position + Vector3.up, dirToPlayer, out RaycastHit hit, distance, obstructionMask))
                 {
                     canSeePlayer = true;
                 }
             }
         }
 
-        // Aggressive State Machine
         if (canSeePlayer)
         {
             isChasing = true;
             chaseCounter = chaseTime;
+            if (visionSpotlight != null) visionSpotlight.color = alertColor;
             PerformAttackChase();
         }
         else if (isChasing)
         {
-            KeepChasing(); // Follow to last known position
+            if (visionSpotlight != null) visionSpotlight.color = alertColor;
+            KeepChasing();
         }
         else
         {
+            if (visionSpotlight != null) visionSpotlight.color = patrolColor;
             Wander();
         }
     }
@@ -85,16 +98,14 @@ public class GuardAI : MonoBehaviour
     {
         agent.isStopped = false;
         agent.speed = chaseSpeed;
-        agent.stoppingDistance = 3f; // Keep this small so he follows closely
+        agent.stoppingDistance = 4f;
         agent.SetDestination(playerScript.transform.position);
 
-        // Face the player
         Vector3 lookDir = playerScript.transform.position - transform.position;
         lookDir.y = 0;
         if (lookDir != Vector3.zero)
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), Time.deltaTime * 15f);
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), Time.deltaTime * 10f);
 
-        // Attack logic
         if (Time.time >= nextAttackTime)
         {
             if (enemyAnim != null) enemyAnim.SetTrigger("shoot");
@@ -106,15 +117,11 @@ public class GuardAI : MonoBehaviour
     void KeepChasing()
     {
         agent.speed = chaseSpeed;
-        agent.stoppingDistance = 0f; // Walk exactly to the spot they vanished
+        agent.stoppingDistance = 0f;
         agent.SetDestination(playerScript.transform.position);
 
         chaseCounter -= Time.deltaTime;
-        if (chaseCounter <= 0)
-        {
-            isChasing = false;
-            agent.speed = patrolSpeed;
-        }
+        if (chaseCounter <= 0) isChasing = false;
     }
 
     void Wander()
@@ -135,5 +142,23 @@ public class GuardAI : MonoBehaviour
         }
     }
 
-    public void Vanish() { Destroy(gameObject); }
+    // --- UPDATED VANISH WITH DEBUGGING ---
+    public void Vanish()
+    {
+        // Update UI first
+        if (UIManager.instance != null) UIManager.instance.AddKill();
+
+        // Spawn 10 to 20 random gems
+        if (gemPrefab != null)
+        {
+            int amount = Random.Range(10, 21); // Random range 10-20
+            for (int i = 0; i < amount; i++)
+            {
+                Vector3 scatter = new Vector3(Random.Range(-1f, 1f), 0.5f, Random.Range(-1f, 1f));
+                Instantiate(gemPrefab, transform.position + scatter, Quaternion.identity);
+            }
+        }
+
+        Destroy(gameObject);
+    }
 }
