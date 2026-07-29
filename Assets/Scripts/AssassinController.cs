@@ -71,5 +71,7 @@ public class AssassinController : MonoBehaviour
             gameObject.SetActive(false);
             Debug.Log("PLAYER VANISHED");
         }
+        //i added some line for checking in repositry;
+        // i also added something for more problem
     }
 }
